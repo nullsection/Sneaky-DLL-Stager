@@ -1,4 +1,4 @@
-# Mischief-DLL-Stager
+# Sneaky-DLL-Stager
 Moderately stealthy shellcode stager. 
 
 
@@ -38,8 +38,8 @@ Moderately stealthy shellcode stager.
 ```
 
 </br>
-This is a very simple shellcode stager that as of right now moderately undetected. I chose to legitimately load functions and then dynamically load others 
-to be less immedialtely suspicious. 
+This is a very simple shellcode stager. Dynamic function loading, function name obfuscation and in memory shellcode execution. 
+Nothing crazy fance but it works. 
 </br>
 
 ## Instrutions 
@@ -49,7 +49,7 @@ to be less immedialtely suspicious.
 4. Server your shellcode on your webserver
 5. rundll32.exe stager.dll,update 
 
-## Detections as of 04/2023
+## Detections
 ![image](https://user-images.githubusercontent.com/46195001/233060794-327b918c-e0f3-42f2-8a57-7b4106d683c5.png)
 
 
